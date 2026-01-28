@@ -75,6 +75,10 @@ export default function LosSystemsPage() {
                 return false;
               }
 
+              if (connector.appKey === "skyslope") {
+                return false;
+              }
+
               return connector.entities?.los != null;
             }}
           />
