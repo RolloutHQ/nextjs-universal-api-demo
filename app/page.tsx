@@ -152,7 +152,6 @@ export default function Home() {
           <CredentialsManager
             apiCategories={{ crm: true }}
             onCredentialAdded={handleCredentialAdded}
-            shouldRenderConnector={(connector) => connector.appKey !== "kw-command"}
           />
         </RolloutLinkProvider>
 
