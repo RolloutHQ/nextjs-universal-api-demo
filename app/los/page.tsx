@@ -71,10 +71,6 @@ export default function LosSystemsPage() {
           <CredentialsManager
             apiCategories={{ los: true }}
             shouldRenderConnector={(connector) => {
-              if (connector.appKey === "kw-command") {
-                return false;
-              }
-
               if (connector.appKey === "skyslope") {
                 return false;
               }
