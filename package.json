@@ -9,7 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@rollout/link-react": "^0.9.3",
+    "@rollout/link-react": "^0.13.0",
     "@upstash/redis": "^1.34.3",
     "jsonwebtoken": "^9.0.2",
     "next": "14.0.4",
