@@ -75,10 +75,7 @@ export default function LosSystemsPage() {
                 return false;
               }
 
-              const hasLosCategory = connector.apiCategories?.los === true;
-              const hasLosEntities = connector.entities?.los != null;
-
-              return hasLosCategory || hasLosEntities;
+              return connector.entities?.los != null;
             }}
           />
         </RolloutLinkProvider>
