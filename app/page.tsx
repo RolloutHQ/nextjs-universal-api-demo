@@ -3,26 +3,51 @@ import { useState, useEffect } from "react";
 import { RolloutLinkProvider, CredentialsManager } from "@rollout/link-react";
 import "@rollout/link-react/style.css";
 
+// Components
+import ResourceTabs, { ResourceType } from "./components/ResourceTabs";
+import PeopleTable from "./components/people/PeopleTable";
+import CreatePersonModal from "./components/people/CreatePersonModal";
+import TasksTable from "./components/tasks/TasksTable";
+import CreateTaskModal from "./components/tasks/CreateTaskModal";
+import EmailsTable from "./components/emails/EmailsTable";
+
+// Types
+import type {
+  Person,
+  CreatePersonInput,
+  Task,
+  CreateTaskInput,
+  ClozeMessage,
+} from "@/types/resources";
+
 export default function Home() {
+  // Core state
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
-  const [credentialId, setCredentialId] = useState(null);
-  const [people, setPeople] = useState([]);
-  const [peopleLoading, setPeopleLoading] = useState(false);
-  const [peopleError, setPeopleError] = useState(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [formData, setFormData] = useState({
-    firstName: "",
-    lastName: "",
-    email: "",
-    street: "",
-    city: "",
-    state: "",
-    zipCode: "",
-  });
+  const [credentialId, setCredentialId] = useState<string | null>(null);
+  const [clozeApiKey, setClozeApiKey] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<ResourceType>("people");
 
+  // People state
+  const [people, setPeople] = useState<Person[]>([]);
+  const [peopleLoading, setPeopleLoading] = useState(false);
+  const [peopleError, setPeopleError] = useState<string | null>(null);
+  const [isPeopleModalOpen, setIsPeopleModalOpen] = useState(false);
+
+  // Tasks state
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [tasksLoading, setTasksLoading] = useState(false);
+  const [tasksError, setTasksError] = useState<string | null>(null);
+  const [isTasksModalOpen, setIsTasksModalOpen] = useState(false);
+
+  // Emails state
+  const [emails, setEmails] = useState<ClozeMessage[]>([]);
+  const [emailsLoading, setEmailsLoading] = useState(false);
+  const [emailsError, setEmailsError] = useState<string | null>(null);
+
+  // Initialize user on mount
   useEffect(() => {
     const storedUserId = localStorage.getItem('userId');
     if (storedUserId) {
@@ -32,46 +57,38 @@ export default function Home() {
       localStorage.setItem('userId', newUserId);
       setUserId(newUserId);
     }
+
+    // Load Cloze API key from localStorage
+    const storedClozeApiKey = JSON.parse(localStorage.getItem("cloze-api-key"))?.[0].data.apiKey;
+    if (storedClozeApiKey) {
+      setClozeApiKey(storedClozeApiKey);
+    }
   }, []);
 
+  // Get token when user changes
   useEffect(() => {
     if (userId) {
       getToken();
     }
   }, [userId]);
 
+  // Fetch credentials when token is ready
   useEffect(() => {
-    if (userId) {
-      fetch('https://universal.rollout.com/api/credentials', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      })
-        .then(response => response.json())
-        .then(data => {
-          if (data && data.length > 0) {
-            const lastCredential = data[0];
-            if (lastCredential && lastCredential.id) {
-              setCredentialId(lastCredential.id);
-            }
-          }
-          // Handle the response data here
-          console.log(data);
-        })
-        .catch(error => {
-          console.error('Error fetching credentials:', error);
-        });
+    if (userId && token) {
+      fetchCredentials();
     }
-  }, [token]);
+  }, [token, userId]);
 
-
+  // Fetch active tab data when credentialId and tab changes
   useEffect(() => {
     if (credentialId && token) {
-      fetchPeople();
+      fetchActiveTabData();
     }
-  }, [credentialId, token]);
+  }, [credentialId, token, activeTab]);
 
   async function getToken() {
+    if (!userId) return;
+
     try {
       const response = await fetch(`/api/rollout-token?userId=${userId}`);
       const data = await response.json();
@@ -83,15 +100,53 @@ export default function Home() {
     }
   }
 
+  async function fetchCredentials() {
+    if (!token) return;
+
+    try {
+      const response = await fetch("https://universal.rollout.com/api/credentials", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const data = await response.json();
+
+      if (data && data.length > 0) {
+        const lastCredential = data[0];
+        if (lastCredential && lastCredential.id) {
+          setCredentialId(lastCredential.id);
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching credentials:", error);
+    }
+  }
+
+  function fetchActiveTabData() {
+    switch (activeTab) {
+      case "people":
+        fetchPeople();
+        break;
+      case "tasks":
+        fetchTasks();
+        break;
+      case "timeline":
+        fetchEmails();
+        break;
+    }
+  }
+
+  // People handlers
   async function fetchPeople(retryCount = 0, maxRetries = 3) {
     setPeopleLoading(true);
     setPeopleError(null);
+
     try {
       const response = await fetch("/api/people", {
         headers: {
           "Content-Type": "application/json",
-          "X-Rollout-Token": token!, // Pass token as a custom header
-          "X-Credential-Id": credentialId!, // Pass credentialId as a custom header
+          "X-Rollout-Token": token!,
+          "X-Credential-Id": credentialId!,
         },
       });
 
@@ -106,8 +161,8 @@ export default function Home() {
       }
 
       const data = await response.json();
-      setPeople(data.people);
-    } catch (err) {
+      setPeople(data.people || []);
+    } catch (err: any) {
       setPeopleError(err.message);
     } finally {
       if (retryCount === 0) {
@@ -116,9 +171,155 @@ export default function Home() {
     }
   }
 
-  const handleCredentialAdded = async ({ id, appKey }) => {
-    console.log(id, appKey);
+  async function createPerson(data: CreatePersonInput) {
+    try {
+      const response = await fetch("/api/people", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Rollout-Token": token!,
+          "X-Credential-Id": credentialId!,
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (response.ok) {
+        fetchPeople();
+      }
+    } catch (error) {
+      console.error("Error creating person:", error);
+    }
+  }
+
+  // Tasks handlers
+  async function fetchTasks(retryCount = 0, maxRetries = 3) {
+    setTasksLoading(true);
+    setTasksError(null);
+
+    try {
+      const response = await fetch("/api/tasks", {
+        headers: {
+          "Content-Type": "application/json",
+          "X-Rollout-Token": token!,
+          "X-Credential-Id": credentialId!,
+        },
+      });
+
+      if (response.status === 409 && retryCount < maxRetries) {
+        setTasksError("Data not ready. Retrying...");
+        await new Promise((resolve) => setTimeout(resolve, 30000));
+        return fetchTasks(retryCount + 1, maxRetries);
+      }
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch tasks data");
+      }
+
+      const data = await response.json();
+      setTasks(data.tasks || []);
+    } catch (err: any) {
+      setTasksError(err.message);
+    } finally {
+      if (retryCount === 0) {
+        setTasksLoading(false);
+      }
+    }
+  }
+
+  async function createTask(data: CreateTaskInput) {
+    try {
+      const apiData = JSON.parse(localStorage.getItem("cloze-api-key"))?.[0].data;
+      const response = await fetch("/api/tasks", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Rollout-Token": token!,
+          "X-Credential-Id": credentialId!,
+          "X-CLOZE-API-Key": apiData.apiKey,
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (response.ok) {
+        fetchTasks();
+      }
+    } catch (error) {
+      console.error("Error creating task:", error);
+    }
+  }
+
+  // Emails handlers
+  async function fetchEmails() {
+    if (!clozeApiKey) {
+      setEmailsError("No Cloze API key available. Please connect your Cloze account.");
+      return;
+    }
+
+    setEmailsLoading(true);
+    setEmailsError(null);
+
+    try {
+      const response = await fetch("/api/emails", {
+        headers: {
+          "Content-Type": "application/json",
+          "X-Rollout-Token": token!,
+          "X-Cloze-Api-Key": clozeApiKey,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch emails");
+      }
+
+      const data = await response.json();
+      // Extract messages array from the response
+      const messages = data.messages || [];
+      // Map messages to add id field for the table
+      const messagesWithId = messages.map((msg: any) => ({
+        ...msg,
+        id: msg.message, // Use message field as id
+      }));
+      setEmails(messagesWithId);
+    } catch (err: any) {
+      setEmailsError(err.message);
+    } finally {
+      setEmailsLoading(false);
+    }
+  }
+
+  const handleCredentialAdded = async ({ id, appKey }: any) => {
+    console.log({id, appKey});
     setCredentialId(id);
+
+    // Fetch credential details
+    if (token && appKey) {
+      try {
+        const response = await fetch(`/api/credentials?appKey=${appKey}&includeData=true`, {
+          headers: {
+            "Content-Type": "application/json",
+            "X-Rollout-Token": token,
+          },
+        });
+
+        if (response.ok) {
+          const credentialData = await response.json();
+          localStorage.setItem(appKey, JSON.stringify(credentialData));
+
+          // If it's Cloze, extract and store the API key
+          if (appKey.includes("cloze-api-key") && credentialData && credentialData.length > 0) {
+            const apiKey = credentialData[0]?.data?.apiKey;
+            if (apiKey) {
+              setClozeApiKey(apiKey);
+              localStorage.setItem("cloze-api-key", apiKey);
+            }
+          }
+        } else {
+          console.error("Failed to fetch credential details");
+        }
+      } catch (error) {
+        console.error("Error fetching credential details:", error);
+      }
+    }
   };
 
   if (loading) {
@@ -146,8 +347,14 @@ export default function Home() {
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-4">
-      <div className="max-w-[600px] w-full">
+    <main className="flex min-h-screen flex-col items-center p-4">
+      <div className="max-w-6xl w-full">
+        {/* Header */}
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-2xl font-bold">Rollout Universal API Demo</h1>
+        </div>
+
+        {/* Rollout Link Provider */}
         <RolloutLinkProvider token={token}>
           <CredentialsManager
             apiCategories={{ crm: true }}
@@ -157,219 +364,64 @@ export default function Home() {
 
         {credentialId && (
           <>
-            {/* Add this button above the table */}
-            <div className="flex justify-end mt-16">
-              <button
-                onClick={() => setIsModalOpen(true)}
-                className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
-              >
-                Create New Lead
-              </button>
+            {/* Resource Tabs */}
+            <div className="mt-8">
+              <ResourceTabs activeTab={activeTab} onTabChange={setActiveTab} />
             </div>
 
-            {/* Add the new lead modal */}
-            {isModalOpen && (
-              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-                <div className="bg-white rounded-lg p-6 w-full max-w-md">
-                  <h2 className="text-xl font-semibold mb-4">
-                    Create New Lead
-                  </h2>
-                  <form
-                    onSubmit={async (e) => {
-                      e.preventDefault();
-                      try {
-                        const response = await fetch("/api/people", {
-                          method: "POST",
-                          headers: {
-                            "Content-Type": "application/json",
-                            "X-Rollout-Token": token!,
-                            "X-Credential-Id": credentialId!,
-                          },
-                          body: JSON.stringify({
-                            firstName: formData.firstName,
-                            lastName: formData.lastName,
-                            emails: [{ value: formData.email }],
-                            addresses: [
-                              {
-                                street: formData.street,
-                                city: formData.city,
-                                state: formData.state,
-                                code: formData.zipCode,
-                              },
-                            ],
-                          }),
-                        });
-
-                        if (response.ok) {
-                          setIsModalOpen(false);
-                          fetchPeople(); // Refresh the list
-                        }
-                      } catch (error) {
-                        console.error("Error creating lead:", error);
-                      }
-                    }}
-                  >
-                    <div className="space-y-4">
-                      <input
-                        type="text"
-                        placeholder="First Name"
-                        className="w-full p-2 border rounded"
-                        value={formData.firstName}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            firstName: e.target.value,
-                          })
-                        }
-                        required
-                      />
-                      <input
-                        type="text"
-                        placeholder="Last Name"
-                        className="w-full p-2 border rounded"
-                        value={formData.lastName}
-                        onChange={(e) =>
-                          setFormData({ ...formData, lastName: e.target.value })
-                        }
-                        required
-                      />
-                      <input
-                        type="email"
-                        placeholder="Email"
-                        className="w-full p-2 border rounded"
-                        value={formData.email}
-                        onChange={(e) =>
-                          setFormData({ ...formData, email: e.target.value })
-                        }
-                        required
-                      />
-                      <input
-                        type="text"
-                        placeholder="Street Address"
-                        className="w-full p-2 border rounded"
-                        value={formData.street}
-                        onChange={(e) =>
-                          setFormData({ ...formData, street: e.target.value })
-                        }
-                        required
-                      />
-                      <input
-                        type="text"
-                        placeholder="City"
-                        className="w-full p-2 border rounded"
-                        value={formData.city}
-                        onChange={(e) =>
-                          setFormData({ ...formData, city: e.target.value })
-                        }
-                        required
-                      />
-                      <input
-                        type="text"
-                        placeholder="State"
-                        className="w-full p-2 border rounded"
-                        value={formData.state}
-                        onChange={(e) =>
-                          setFormData({ ...formData, state: e.target.value })
-                        }
-                        required
-                      />
-                      <input
-                        type="text"
-                        placeholder="ZIP Code"
-                        className="w-full p-2 border rounded"
-                        value={formData.zipCode}
-                        onChange={(e) =>
-                          setFormData({ ...formData, zipCode: e.target.value })
-                        }
-                        required
-                      />
-                    </div>
-                    <div className="flex justify-end space-x-2 mt-4">
-                      <button
-                        type="button"
-                        onClick={() => setIsModalOpen(false)}
-                        className="px-4 py-2 text-gray-600 hover:text-gray-800"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="submit"
-                        className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-                      >
-                        Create Lead
-                      </button>
-                    </div>
-                  </form>
-                </div>
-              </div>
-            )}
-
-
+            {/* Tab Content */}
             <div className="mt-8">
-              <h2 className="text-xl font-semibold mb-4">People Records</h2>
-
-              {peopleLoading && (
-                <p className="text-gray-500">Loading people data...</p>
+              {activeTab === "people" && (
+                <>
+                  <PeopleTable
+                    people={people}
+                    loading={peopleLoading}
+                    error={peopleError}
+                    onCreateClick={() => setIsPeopleModalOpen(true)}
+                  />
+                  <CreatePersonModal
+                    isOpen={isPeopleModalOpen}
+                    onClose={() => setIsPeopleModalOpen(false)}
+                    onSubmit={createPerson}
+                  />
+                </>
               )}
 
-              {peopleError && (
-                <p className="text-red-500">Error: {peopleError}</p>
+              {activeTab === "tasks" && (
+                <>
+                  <TasksTable
+                    tasks={tasks}
+                    loading={tasksLoading}
+                    error={tasksError}
+                    onCreateClick={() => setIsTasksModalOpen(true)}
+                  />
+                  <CreateTaskModal
+                    isOpen={isTasksModalOpen}
+                    onClose={() => setIsTasksModalOpen(false)}
+                    onSubmit={createTask}
+                  />
+                </>
               )}
 
-              {!peopleLoading && !peopleError && people.length > 0 && (
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse">
-                    <thead className="bg-gray-100 dark:bg-gray-800">
-                      <tr>
-                        <th className="p-2 text-left border border-gray-200">
-                          Name
-                        </th>
-                        <th className="p-2 text-left border border-gray-200">
-                          Stage
-                        </th>
-                        <th className="p-2 text-left border border-gray-200">
-                          Source
-                        </th>
-                        <th className="p-2 text-left border border-gray-200">
-                          Email
-                        </th>
-                        <th className="p-2 text-left border border-gray-200">
-                          Location
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {people.map((person) => (
-                        <tr
-                          key={person.id}
-                          className="hover:bg-gray-50 dark:hover:bg-gray-700"
-                        >
-                          <td className="p-2 border border-gray-200">
-                            {person.firstName} {person.lastName}
-                          </td>
-                          <td className="p-2 border border-gray-200">
-                            {person.stage}
-                          </td>
-                          <td className="p-2 border border-gray-200">
-                            {person.source}
-                          </td>
-                          <td className="p-2 border border-gray-200">
-                            {person.emails?.[0]?.value || "N/A"}
-                          </td>
-                          <td className="p-2 border border-gray-200">
-                            {person.addresses?.[0]
-                              ? `${person.addresses[0].city}, ${person.addresses[0].state}`
-                              : "N/A"}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              {!peopleLoading && !peopleError && people.length === 0 && (
-                <p className="text-gray-500">No people records found.</p>
+              {activeTab === "timeline" && (
+                <>
+                  <EmailsTable
+                    emails={emails}
+                    loading={emailsLoading}
+                    error={emailsError}
+                  />
+                  <TasksTable
+                    tasks={tasks}
+                    loading={tasksLoading}
+                    error={tasksError}
+                    onCreateClick={() => setIsTasksModalOpen(true)}
+                  />
+                  <CreateTaskModal
+                    isOpen={isTasksModalOpen}
+                    onClose={() => setIsTasksModalOpen(false)}
+                    onSubmit={createTask}
+                  />
+                </>
               )}
             </div>
           </>
