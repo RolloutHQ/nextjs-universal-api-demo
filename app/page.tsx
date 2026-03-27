@@ -152,6 +152,12 @@ export default function Home() {
           <CredentialsManager
             apiCategories={{ crm: true }}
             onCredentialAdded={handleCredentialAdded}
+            shouldRenderConnector={(connector) => {
+              const normalizedAppKey = connector.appKey?.replace(/[\s-]/g, "").toLowerCase();
+              const hiddenConnectors = new Set(["kwcommand", "clozeapikey"]);
+
+              return !hiddenConnectors.has(normalizedAppKey ?? "");
+            }}
           />
         </RolloutLinkProvider>
 
