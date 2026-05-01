@@ -1,6 +1,5 @@
 "use client";
 import { useState, useEffect } from "react";
-import Link from "next/link";
 import { RolloutLinkProvider, CredentialsManager } from "@rollout/link-react";
 import "@rollout/link-react/style.css";
 
@@ -149,23 +148,6 @@ export default function Home() {
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-4">
       <div className="max-w-[600px] w-full">
-        <div className="mb-6 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 shadow-sm">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <p className="font-semibold text-slate-900">Need Gmail only?</p>
-              <p className="mt-1">
-                Use the dedicated Gmail connection page to keep this flow limited
-                to Google mail accounts.
-              </p>
-            </div>
-            <Link
-              href="/gmail"
-              className="shrink-0 rounded-full bg-slate-900 px-4 py-2 font-medium text-white transition hover:bg-slate-700"
-            >
-              Open Gmail Page
-            </Link>
-          </div>
-        </div>
         <RolloutLinkProvider token={token}>
           <CredentialsManager
             apiCategories={{ crm: true }}

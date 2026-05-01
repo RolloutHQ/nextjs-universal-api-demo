@@ -14,6 +14,7 @@ type Connector = {
 };
 
 const GMAIL_MATCHERS = ["gmail", "googlemail"];
+const GMAIL_EXCLUDED_MATCHERS = ["otp"];
 
 function normalizeConnectorValue(value?: string | null) {
   return (value ?? "").replace(/[\s_-]/g, "").toLowerCase();
@@ -27,6 +28,14 @@ function isGmailConnector(connector: Connector) {
     connector.key,
     connector.slug,
   ].map(normalizeConnectorValue);
+
+  const isExcluded = connectorValues.some((value) =>
+    GMAIL_EXCLUDED_MATCHERS.some((matcher) => value.includes(matcher)),
+  );
+
+  if (isExcluded) {
+    return false;
+  }
 
   return connectorValues.some((value) =>
     GMAIL_MATCHERS.some((matcher) => value.includes(matcher)),
